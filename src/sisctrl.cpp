@@ -26,16 +26,10 @@ void closeError(map<string,map<string, int[2]>> &error, string &name, string &au
 void closeEdges(map<string,vector<arista>> &graph, string &name,string &autom);
 
 void createChild(YAML::Node& doc,map <string, vector<arista>> &graph, map<string, map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error);
-void closePipesSisctrl(map<string, map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error);
+void closePipesSisctrl(map<string, map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error, map <string, vector<arista>> &graph);
 void closeUnusedPipes(string &autom,string &name, map <string, vector<arista>> &graph, map<string, map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error);
 
-void createPipe(int* p){
-      if(pipe(p)==-1){
-          //Error creando tuberia
-          exit(EXIT_FAILURE);
-      }
-}
-
+void createPipe(int* p);
 
 
 map <string, vector<arista>> grafo;
@@ -43,6 +37,11 @@ map <string, vector<arista>> grafo;
 
 int main(int argc, char *argv[]) {
     YAML::Node doc;
+
+    if (argc != 2) {
+        cerr << "Usage: ./sisctrl <file.yaml>" << endl;
+        exit(EXIT_FAILURE);
+    }
 
 
     try {
@@ -78,31 +77,22 @@ int main(int argc, char *argv[]) {
                 createPipe(edge.pipefd);
                 aristas.push_back(edge);
                 grafo[nomAutomata] = aristas;
-
-                // arista_tostring(grafo[doc[i]["automata"].as<string>()][k]);
-                // cout << "Automata: " << nomAutomata << "   " << "Estado: " << states[nomAutomata][k] << endl;
             }
         }
     }
     createChild(doc,grafo,finals,initial,error);
-    //     cout << "----------------------------" << endl;
-
-    // for (auto const& x : states) {
-    //     for (auto const& s : x.second) {
-    //         cout << "Automata: " << x.first << "   " << endl;
-    //     }
-    // }
-
-    // for (auto const& x : grafo) {
-    //     for (unsigned int i = 0; i < x.second.size(); i++) {
-    //         arista_tostring(grafo[x.first][i]);
-    //     }
-    // }
 
     return 0;
 }
 
-void createChild(YAML::Node& doc,map <string, vector<arista>> &graph, map<string, map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error) {
+void createPipe(int* p){
+      if(pipe(p)==-1){
+          //Error creando tuberia
+          exit(EXIT_FAILURE);
+      }
+}
+
+void createChild(YAML::Node& doc,map<string, vector<arista>> &graph, map<string, map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error) {
     int cpid;
     vector<int> pids;
     for (unsigned int i = 0; i < doc.size(); i++) {
@@ -117,7 +107,7 @@ void createChild(YAML::Node& doc,map <string, vector<arista>> &graph, map<string
             pids.push_back(cpid);
         }
     }
-    closePipesSisctrl(finals,initial,error);
+    closePipesSisctrl(finals,initial,error, graph);
     int status;
     for (int id : pids) {
         waitpid(id, &status, 0);
@@ -127,19 +117,20 @@ void createChild(YAML::Node& doc,map <string, vector<arista>> &graph, map<string
 }
 
 void closeUnusedPipes(string &autom,string &name, map <string, vector<arista>> &graph, map<string, map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error) {
-    //closeFinals(finals,name,autom);
-    //closeInitial(initial,name,autom);
-    //closeError(error, name, autom);
-    //closeEdges(graph,name,autom);
+    closeFinals(finals,name,autom);
+    closeInitial(initial,name,autom);
+    closeError(error, name, autom);
+    closeEdges(graph,name,autom);
 }
 
 void closeFinals(map<string,map<string, int[2]>> &finals, string &name, string &autom){
-    for(auto const& mapa: finals){
-        for(auto const& p: mapa.second){
-            if(p.first==name && mapa.first==autom){
+    for (auto const& mapa: finals){
+        for (auto const& p: mapa.second){
+            if (p.first==name && mapa.first==autom){
                 cout << name << " is final in " << autom << endl;
                 close(p.second[0]);
-            }else{
+            }
+            else {
                 close(p.second[0]);
                 close(p.second[1]);
             }
@@ -147,52 +138,57 @@ void closeFinals(map<string,map<string, int[2]>> &finals, string &name, string &
         }
     }
 }
+
 void closeInitial(map<string,map<string, int[2]>> &initial, string &name, string &autom){
-    for(auto const& mapa: initial){
-        for(auto const& p: mapa.second){
-            if(p.first==name && mapa.first==autom){
+    for (auto const& mapa: initial){
+        for (auto const& p: mapa.second){
+            if (p.first==name && mapa.first==autom){
                 cout << name << " is initial in " << autom << endl;
                 close(p.second[1]);
-            }else{
+            }
+            else {
                 close(p.second[0]);
                 close(p.second[1]);
             }
-
         }
     }
 }
+
 void closeError(map<string,map<string, int[2]>> &error, string &name, string &autom){
-    for(auto const& mapa: error){
-        for(auto const& p: mapa.second){
+    for (auto const& mapa: error){
+        for (auto const& p: mapa.second){
             if(p.first==name && mapa.first==autom){
                 cout << name << " has error pipe in " << autom << endl;
                 close(p.second[0]);
-            }else{
+            }
+            else{
                 close(p.second[0]);
                 close(p.second[1]);
             }
-
         }
     }
 }
+
 void closeEdges(map<string,vector<arista>> &graph, string &name,string &autom){
-    for(auto const& mapa: graph){
-        for(arista ar: mapa.second){
-            if(mapa.first==autom){
-                if(ar.nodeIn==name && ar.nodeOut!=name ){
-                    
+    for (auto const& mapa: graph){
+        for (arista ar: mapa.second){
+            if (mapa.first==autom){
+                if (ar.nodeIn==name && ar.nodeOut!=name ){      
                     close(ar.pipefd[0]);
                     cout<< " Closing read from " << ar.nodeIn <<" to "<< ar.nodeOut << " for " << name << " in " << autom<<endl;
-                }else if(ar.nodeOut==name && ar.nodeIn!=name){
+                }
+                else if (ar.nodeOut==name && ar.nodeIn!=name){
                     cout<< " Closing write from " << ar.nodeIn <<" to "<< ar.nodeOut << " for " << name << " in " << autom<<endl;
                     close(ar.pipefd[1]);
-                }else if(ar.nodeOut!=name && ar.nodeIn!=name){
+                }
+                else if (ar.nodeOut!=name && ar.nodeIn!=name){
                     cout<< " Closing trasition from " << ar.nodeIn <<" to "<< ar.nodeOut << " for " << name << " in " << autom<<endl;
                     close(ar.pipefd[0]);
                     close(ar.pipefd[1]);
                 }
-            }else{
-                cout<< " Closing trasition from " << ar.nodeIn <<" to "<< ar.nodeOut << " for " << name << " in " << autom<<endl;
+            }
+            else {
+                cout << " Closing trasition from " << ar.nodeIn <<" to "<< ar.nodeOut << " for " << name << " in " << autom <<endl;
                 close(ar.pipefd[0]);
                 close(ar.pipefd[1]);
             }
@@ -200,26 +196,34 @@ void closeEdges(map<string,vector<arista>> &graph, string &name,string &autom){
     }
 }
 
-void closePipesSisctrl(map<string, map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error){
+void closePipesSisctrl(map<string, map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error, map<string, vector<arista>> &graph){
      //Closing read in all error pipes
-    for(auto const& mapa: error){
-        for(auto const& p: mapa.second){
+    for (auto const& mapa: error) {
+        for (auto const& p: mapa.second){
             close(p.second[0]);
             cout<< " Closing read in " << p.first << " in " << mapa.first<<endl;
         }
     }
     //Closing write in all final pipes
-    for(auto const& mapa: finals){
-        for(auto const& p: mapa.second){
+    for (auto const& mapa: finals){
+        for (auto const& p: mapa.second) {
             close(p.second[1]);
             cout<< " Closing write in " << p.first << " in " << mapa.first<<endl;
         }
     }
     //Closing all read in initial pipes
-    for(auto const& mapa: initial){
-        for(auto const& p: mapa.second){
+    for (auto const& mapa: initial){
+        for (auto const& p: mapa.second) {
             close(p.second[0]);
             cout<< " Closing read in " << p.first << " in " << mapa.first<<endl;
+        }
+    }
+    //Closing all read in graph pipes
+    for (auto const& mapa : graph) {
+        for (arista ar : mapa.second) {
+            close(ar.pipefd[0]);
+            close(ar.pipefd[1]);
+            cout << " Closing pipe from " << ar.nodeIn << " to " << ar.nodeOut << " in " << mapa.first << endl; 
         }
     }
 }
