@@ -10,6 +10,7 @@
 #include <vector>
 #include <thread>
 #include <semaphore.h>
+#include <fcntl.h>
 
 using namespace std;
 
@@ -95,6 +96,14 @@ int main(int argc, char *argv[]) {
 void createPipe(int* p){
       if(pipe(p)==-1){
           //Error creando tuberia
+          exit(EXIT_FAILURE);
+      }
+      if(fcntl(p[0],F_SETFL,O_NONBLOCK)<0){
+          cout<< "ey" << endl;
+          exit(EXIT_FAILURE);
+      }
+      if(fcntl(p[1],F_SETFL,O_NONBLOCK)<0){
+          cout<< "ey" << endl;
           exit(EXIT_FAILURE);
       }
 }
@@ -289,14 +298,27 @@ void createThreads(string &autom,string &name, map <string, vector<arista>> &gra
 }
 
 void threadIteration(string autom, string name,int pipe){
-    
-    char buf;
-    string msg ="";
-    string recog,rest;
-    while(read(pipe,&buf,1)>0){
-        msg.push_back(buf);
+    while(true){
+        char buf;
+        string msg ="";
+        string recog,rest;
+        while((read(pipe,&buf,1)>0)&&(buf!='}')){
+            msg.push_back(buf);
+        }
+        if(msg.length()>0){
+            YAML::Node doc = YAML::Load(msg);
+            recog = doc["recog"].as<string>();
+            rest = doc["rest"].as<string>();
+            if(rest.length()==0){
+                if(finals[autom].count(name)>0){
+                    cout << "reconoci" << endl;
+                    // sendRecognized(recog,rest,autom,name);
+                }else{
+                    cout << "ey que el pasa loko" << endl;
+                }
+            }
+        }
     }
-    cout << msg << endl;
         
         
     
@@ -318,7 +340,7 @@ void sendRecognized(string recog, string rest, string autom, string name){
     out<<YAML::EndMap;
     cout << out.c_str()<< endl;
     const char* str = out.c_str();
-    //write(pipe,out.c_str(),strlen(str));
+    write(pipe,out.c_str(),strlen(str));
 
 }
 
@@ -377,30 +399,38 @@ void errRead(int pipe, string autom){
 }
 
 void finalRead(int pipe, string autom){
-    //read(pipe,buf,1)
-    string msg="{ codterm: 0 , recog: eres , rest: \"\" }";
-    string codterm,recog,rest;
-    YAML::Node doc = YAML::Load(msg);
-    codterm = doc["codterm"].as<string>();
-    recog = doc["recog"].as<string>();
-    rest = doc["rest"].as<string>();
-    YAML::Emitter out;
-    out << YAML::BeginSeq << YAML::BeginMap;
-    out << YAML::Key <<"msgtype";
-    out << YAML::Value <<"accept";
-    out << YAML::Key << "accept";
-    out << YAML::Value << YAML::BeginSeq << YAML::BeginMap;
-    out << YAML::Key <<"automata";
-    out << YAML::Value << autom;
-    out << YAML::Key <<"msg";
-    out << YAML::Value <<recog+rest;
-    out << YAML::EndMap;
-    out << YAML::EndSeq;
-    out << YAML::EndMap;
-    out << YAML::EndSeq;
-    sem_wait(&mutex2);
-    //cout << out.c_str()<< endl; 
-    sem_post(&mutex2);
+    while(true){
+        string msg="";
+        char buf;
+        while(read(pipe,&buf,1)>0){
+            msg.push_back(buf);
+        }
+        if(msg.length()!=0){
+            string codterm,recog,rest;
+            YAML::Node doc = YAML::Load(msg);
+            codterm = doc["codterm"].as<string>();
+            recog = doc["recog"].as<string>();
+            rest = doc["rest"].as<string>();
+            YAML::Emitter out;
+            out << YAML::BeginSeq << YAML::BeginMap;
+            out << YAML::Key <<"msgtype";
+            out << YAML::Value <<"accept";
+            out << YAML::Key << "accept";
+            out << YAML::Value << YAML::BeginSeq << YAML::BeginMap;
+            out << YAML::Key <<"automata";
+            out << YAML::Value << autom;
+            out << YAML::Key <<"msg";
+            out << YAML::Value <<recog+rest;
+            out << YAML::EndMap;
+            out << YAML::EndSeq;
+            out << YAML::EndMap;
+            out << YAML::EndSeq;
+            sem_wait(&mutex2);
+            cout << out.c_str()<< endl; 
+            sem_post(&mutex2);
+        }
+    }
+
 
 }
 
@@ -424,9 +454,7 @@ void inOutOperations(map<string,map<string,int>> pids, map<string,map<string, in
          }
      }
 
-     for(int i=0;i<threads.size();i++){
-        threads[i].join();
-    } 
+    
 
     string linea, cmd, msg;
     while(true){
@@ -448,8 +476,8 @@ void inOutOperations(map<string,map<string,int>> pids, map<string,map<string, in
                     out<<YAML::Value << msg;
                     out<<YAML::EndMap;
                     //cout<< out.c_str()<< endl;
-                    
-                    write(p.second[1],msg.c_str(),msg.length());
+                    const char* str = out.c_str();
+                    write(p.second[1],str,strlen(str));
                         
                 }
             }
@@ -518,11 +546,13 @@ void inOutOperations(map<string,map<string,int>> pids, map<string,map<string, in
 
             }
             }else if(cmd=="stop"){
+                
                 for(auto const& map : pids){
                     for (auto const& p: map.second) {
                          kill(p.second,SIGKILL);
                     }
                 }
+                
                 
                 break;
             }else{
@@ -532,8 +562,9 @@ void inOutOperations(map<string,map<string,int>> pids, map<string,map<string, in
             }
         }
 
-    
+
     int status;
+    
     for(auto const& map : pids){
         for (auto const& p: map.second) {
             waitpid(p.second, &status, 0);
