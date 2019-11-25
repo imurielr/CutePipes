@@ -7,4 +7,5 @@ Para poder ejecutar CutePipes, es necesario cumplir con los siguientes requerimi
   1.2 Mac OS : Puede ejecutar una máquina virtual de Linux obteniendo una imagen de este y usando VirtualBox. Vease más aquí: https://www.virtualbox.org/
 2. Poseer el compilador g++ minimo su version 7.4.0.
 3. Poseer la versión 11 de C++.
-4. Instalar la libreria yaml-cpp en su versión 6.3 con el comando "sudo apt install libyaml-cpp-dev". Vease más en: https://yaml.org/
+4. Tener la herramienta make , que puede descargarse, junto con algunos compiladores con "sudo apt install build-essencials" .
+5. Instalar la libreria yaml-cpp en su versión 6.3 con el comando "sudo apt install libyaml-cpp-dev". Vease más en: https://yaml.org/
