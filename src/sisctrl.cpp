@@ -29,6 +29,7 @@ void closeEdges(map<string,vector<arista>> &graph, string &name,string &autom ,b
 void threadIteration(string autom, string name ,int pipe);
 void finalRead(int pipe, string autom);
 void errRead(int pipe, string autom);
+void sendRecognized(string recog, string rest, string autom, string name);
 
 void createChild(YAML::Node& doc,map <string, vector<arista>> &graph, map<string, map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error);
 void closePipesSisctrl(map<string, map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error, map <string, vector<arista>> &graph, bool &t);
@@ -39,7 +40,7 @@ void createPipe(int* p);
 
 sem_t mutex1, mutex2, mutex3, mutex4; //mutex3: State error, mutex4: final State, mutex2:cout ssisctrl
 map <string, vector<arista>> grafo;
-
+map<string, map<string, int[2]>> error, finals, initial;
 
 int main(int argc, char *argv[]) {
     YAML::Node doc;
@@ -58,7 +59,7 @@ int main(int argc, char *argv[]) {
     }
 
     arista edge;
-    map<string, map<string, int[2]>> error, finals, initial;
+    
     // vector<string> states;
     for (unsigned int i = 0; i < doc.size(); i++) { // Ciclo por cada automata
         YAML::Node delta = doc[i]["delta"];
@@ -117,7 +118,7 @@ void createChild(YAML::Node& doc,map<string, vector<arista>> &graph, map<string,
                 //
                 cout << "Pos me mato" << endl;
                 ps=true;
-                closeUnusedPipes(automata,node,graph,finals,initial,error,ps);
+                //closeUnusedPipes(automata,node,graph,finals,initial,error,ps);
                 
                 exit(EXIT_SUCCESS);
             }
@@ -288,12 +289,40 @@ void createThreads(string &autom,string &name, map <string, vector<arista>> &gra
 }
 
 void threadIteration(string autom, string name,int pipe){
-
-    sem_wait(&mutex3);
-    sem_post(&mutex3);
-    sem_wait(&mutex4);
-    sem_post(&mutex4);
+    
+    char buf;
+    string msg ="";
+    string recog,rest;
+    while(read(pipe,&buf,1)>0){
+        msg.push_back(buf);
+    }
+    cout << msg << endl;
+        
+        
+    
+     
+    
 }
+
+void sendRecognized(string recog, string rest, string autom, string name){
+    int pipe = finals[autom][name][1];
+    YAML::Emitter out;
+    out << YAML::Flow;
+    out << YAML::BeginMap;
+    out<<YAML::Key << "codterm";
+    out<<YAML::Value << "0";
+    out<<YAML::Key << "recog";
+    out<<YAML::Value << recog;
+    out<<YAML::Key << "rest";
+    out<<YAML::Value << rest;
+    out<<YAML::EndMap;
+    cout << out.c_str()<< endl;
+    const char* str = out.c_str();
+    //write(pipe,out.c_str(),strlen(str));
+
+}
+
+
 
 void errRead(int pipe, string autom){
     //read(pipe,buf,1)
@@ -370,7 +399,7 @@ void finalRead(int pipe, string autom){
     out << YAML::EndMap;
     out << YAML::EndSeq;
     sem_wait(&mutex2);
-    cout << out.c_str()<< endl; 
+    //cout << out.c_str()<< endl; 
     sem_post(&mutex2);
 
 }
@@ -418,8 +447,10 @@ void inOutOperations(map<string,map<string,int>> pids, map<string,map<string, in
                     out<<YAML::Key << "rest";
                     out<<YAML::Value << msg;
                     out<<YAML::EndMap;
-                    cout<< out.c_str()<< endl;
-                    //write(p.second[1],msg.c_str(),msg.length);
+                    //cout<< out.c_str()<< endl;
+                    
+                    write(p.second[1],msg.c_str(),msg.length());
+                        
                 }
             }
         }else if(cmd=="info"){
@@ -487,11 +518,12 @@ void inOutOperations(map<string,map<string,int>> pids, map<string,map<string, in
 
             }
             }else if(cmd=="stop"){
-                for (auto const& map: initial){
-                    for (auto const& p: map.second ){
-                        //write(p.second[1],"stop",msg.length);
+                for(auto const& map : pids){
+                    for (auto const& p: map.second) {
+                         kill(p.second,SIGKILL);
                     }
                 }
+                
                 break;
             }else{
                 sem_wait(&mutex2);
