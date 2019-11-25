@@ -8,6 +8,8 @@
 #include <vector>
 #include <yaml-cpp/yaml.h>
 #include <vector>
+#include <thread>
+#include <semaphore.h>
 
 using namespace std;
 
@@ -20,19 +22,20 @@ struct arista {
 
 void arista_tostring(arista edge);
 
-void closeFinals(map<string,map<string, int[2]>> &finals, string &name, string &autom);
-void closeInitial(map<string,map<string, int[2]>> &initial, string &name, string &autom);
-void closeError(map<string,map<string, int[2]>> &error, string &name, string &autom);
-void closeEdges(map<string,vector<arista>> &graph, string &name,string &autom);
+void closeFinals(map<string,map<string, int[2]>> &finals, string &name, string &autom,bool &t);
+void closeInitial(map<string,map<string, int[2]>> &initial, string &name, string &autom ,bool &t);
+void closeError(map<string,map<string, int[2]>> &error, string &name, string &autom ,bool &t);
+void closeEdges(map<string,vector<arista>> &graph, string &name,string &autom ,bool &t);
+void threadIteration(string autom, string name ,int pipe);
 
 void createChild(YAML::Node& doc,map <string, vector<arista>> &graph, map<string, map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error);
-void closePipesSisctrl(map<string, map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error, map <string, vector<arista>> &graph);
-void closeUnusedPipes(string &autom,string &name, map <string, vector<arista>> &graph, map<string, map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error);
-void testArrival(map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error, map<string, map<string, int[2]>> &finals, string &name, string &autom);
+void closePipesSisctrl(map<string, map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error, map <string, vector<arista>> &graph, bool &t);
+void closeUnusedPipes(string &autom,string &name, map <string, vector<arista>> &graph, map<string, map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error, bool &t);
+void createThreads(string &autom,string &name, map <string, vector<arista>> &graph, map<string, map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error);
+void inOutOperations(map<string,map<string,int>> pids, map<string,map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error, map<string, vector<arista>> &graph);
 void createPipe(int* p);
-void process(string &s, map<string, map<string, int[2]>> &error,map<string, map<string, int[2]>> &finals,string &name, string &autom);
 
-
+sem_t mutex1;
 map <string, vector<arista>> grafo;
 
 
@@ -95,59 +98,52 @@ void createPipe(int* p){
 
 void createChild(YAML::Node& doc,map<string, vector<arista>> &graph, map<string, map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error) {
     int cpid;
-    vector<int> pids;
+    map<string,map<string,int>> pids;
     for (unsigned int i = 0; i < doc.size(); i++) {
         string automata = doc[i]["automata"].as<string>();
         YAML::Node delta = doc[i]["delta"];
         for (unsigned j = 0; j < delta.size(); j++) {
             string node = delta[j]["node"].as<string>();
             if ((cpid = fork()) == 0) {
-                closeUnusedPipes(automata,node,graph,finals,initial,error);
-                testArrival(initial,error,finals,node,automata);
+                bool ps =false;
+                closeUnusedPipes(automata,node,graph,finals,initial,error,ps); // Falso - Cerrar no usadas, True - Cerrar usadas
+                
+                createThreads(automata,node,graph, finals,initial, error);
+                //
+                //
+                //
+                cout << "Pos me mato" << endl;
+                ps=true;
+                closeUnusedPipes(automata,node,graph,finals,initial,error,ps);
+                
                 exit(EXIT_SUCCESS);
             }
-            pids.push_back(cpid);
+            pids[automata][node]=cpid;
         }
     }
-    closePipesSisctrl(finals,initial,error, graph);
-    for (auto const& mapa: initial){
-        for (auto const& p: mapa.second) {
-            string s = "Hola bb";
-            write(p.second[1],s.c_str(), s.length());
-            close(p.second[1]);
-        }
-    }
-    for (auto const& mapa: error){
-        for (auto const& p: mapa.second) {
-            char buf;
-            string s = "";
-            while (read(p.second[0], &buf, 1) > 0)
-                //string c(1,buf);
-                s.append(&buf);
-            cout << s << endl;
-        }
-    }
-    int status;
+    bool ss=false;
+    closePipesSisctrl(finals,initial,error, graph,ss);
+    inOutOperations(pids,finals,initial,error,graph);
 
-    for (int id : pids) {
-        waitpid(id, &status, 0);
-    }
-    cout << "Mis hijos murieron, me voy a suicidar" << endl;
-    exit(EXIT_SUCCESS);
+    
 }
 
-void closeUnusedPipes(string &autom,string &name, map <string, vector<arista>> &graph, map<string, map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error) {
-    closeFinals(finals,name,autom);
-    closeInitial(initial,name,autom);
-    closeError(error, name, autom);
-    closeEdges(graph,name,autom);
+void closeUnusedPipes(string &autom,string &name, map <string, vector<arista>> &graph, map<string, map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error, bool &t) {
+    closeFinals(finals,name,autom,t);
+    closeInitial(initial,name,autom,t);
+    closeError(error, name, autom,t);
+    closeEdges(graph,name,autom,t);
 }
 
-void closeFinals(map<string,map<string, int[2]>> &finals, string &name, string &autom){
+void closeFinals(map<string,map<string, int[2]>> &finals, string &name, string &autom ,bool &t){
     for (auto const& mapa: finals){
         for (auto const& p: mapa.second){
-            if (p.first==name && mapa.first==autom){
-                close(p.second[0]);
+            if (p.first==name && mapa.first==autom ){
+                if(!t){
+                    close(p.second[0]);
+                }else{
+                    close(p.second[1]);
+                }
             }
             else {
                 close(p.second[0]);
@@ -158,11 +154,15 @@ void closeFinals(map<string,map<string, int[2]>> &finals, string &name, string &
     }
 }
 
-void closeInitial(map<string,map<string, int[2]>> &initial, string &name, string &autom){
+void closeInitial(map<string,map<string, int[2]>> &initial, string &name, string &autom,bool &t){
     for (auto const& mapa: initial){
         for (auto const& p: mapa.second){
             if (p.first==name && mapa.first==autom){
-                close(p.second[1]);
+                if(!t){
+                    close(p.second[1]);
+                }else{
+                    close(p.second[0]);
+                }
             }
             else {
                 close(p.second[0]);
@@ -172,11 +172,15 @@ void closeInitial(map<string,map<string, int[2]>> &initial, string &name, string
     }
 }
 
-void closeError(map<string,map<string, int[2]>> &error, string &name, string &autom){
+void closeError(map<string,map<string, int[2]>> &error, string &name, string &autom ,bool &t){
     for (auto const& mapa: error){
         for (auto const& p: mapa.second){
             if(p.first==name && mapa.first==autom){
-                close(p.second[0]);
+                if(!t){
+                    close(p.second[0]);
+                }else{
+                    close(p.second[1]);
+                }
             }
             else{
                 close(p.second[0]);
@@ -186,17 +190,24 @@ void closeError(map<string,map<string, int[2]>> &error, string &name, string &au
     }
 }
 
-void closeEdges(map<string,vector<arista>> &graph, string &name,string &autom){
+void closeEdges(map<string,vector<arista>> &graph, string &name,string &autom ,bool &t){
     for (auto const& mapa: graph){
         for (arista ar: mapa.second){
             if (mapa.first==autom){
-                if (ar.nodeIn==name && ar.nodeOut!=name ){      
-                    close(ar.pipefd[0]);
+                if (ar.nodeIn==name && ar.nodeOut!=name ){  
+                    if(!t){    
+                        close(ar.pipefd[0]);
+                    }else{
+                        close(ar.pipefd[1]);
+                    }
                     
                 }
                 else if (ar.nodeOut==name && ar.nodeIn!=name){
-                    
-                    close(ar.pipefd[1]);
+                    if(!t){
+                        close(ar.pipefd[1]);
+                    }else{
+                        close(ar.pipefd[0]);
+                    }
                 }
                 else if (ar.nodeOut!=name && ar.nodeIn!=name){
                     
@@ -212,23 +223,35 @@ void closeEdges(map<string,vector<arista>> &graph, string &name,string &autom){
     }
 }
 
-void closePipesSisctrl(map<string, map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error, map<string, vector<arista>> &graph){
-     //Closing read in all error pipes
+void closePipesSisctrl(map<string, map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error, map<string, vector<arista>> &graph, bool &t){
+     //Closing writw in all error pipes
     for (auto const& mapa: error) {
         for (auto const& p: mapa.second){
-            close(p.second[1]);
+            if(!t){
+                close(p.second[1]);
+            }else{
+                close(p.second[0]);
+            }
         }
     }
     //Closing write in all final pipes
     for (auto const& mapa: finals){
         for (auto const& p: mapa.second) {
-            close(p.second[1]);
+            if(!t){
+                close(p.second[1]);
+            }else{
+                close(p.second[0]);
+            }
         }
     }
     //Closing all read in initial pipes
     for (auto const& mapa: initial){
         for (auto const& p: mapa.second) {
-            close(p.second[0]);
+            if(!t){
+                close(p.second[0]);
+            }else{
+                close(p.second[1]);
+            }
         }
     }
     //Closing all read in graph pipes
@@ -240,33 +263,84 @@ void closePipesSisctrl(map<string, map<string, int[2]>> &finals, map<string, map
     }
 }
 
-void testArrival(map<string, map<string, int[2]>> &initial,map<string, map<string, int[2]>> &error,map<string, map<string, int[2]>> &finals, string &name, string &autom){
+void createThreads(string &autom,string &name, map <string, vector<arista>> &graph, map<string, map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error){
+
+    vector<thread> threads;
     
-    for (auto const& mapa: initial){
-        for (auto const& p: mapa.second) {
-            if (p.first==name && mapa.first==autom){
-                char buf;
-                string s = "";
-                while (read(p.second[0], &buf, 1) > 0)
-                   //string c(1,buf);
-                   s.append(&buf);
-                process(s,error,finals,name,autom);
-            }  
+ 
+    if(initial[autom].count(name)>0){
+        int pipe =initial[autom][name][0];
+        thread thinit(threadIteration,autom, name,pipe);
+        threads.push_back(move(thinit));
+    } 
+    for(arista ar : graph[autom]){
+        if(ar.nodeOut==name){
+            thread thar(threadIteration,autom, name,ar.pipefd[0]);
+            threads.push_back(move(thar));
         }
-    }
+    } 
+    for(int i=0;i<threads.size();i++){
+        threads[i].join();
+    } 
+}
+
+void threadIteration(string autom, string name,int pipe){
+
     
 }
 
-void process(string &s, map<string, map<string, int[2]>> &error,map<string, map<string, int[2]>> &finals,string &name, string &autom){
-    s = s.append("procesada");
-    for (auto const& mapa: error){
-        for (auto const& p: mapa.second){
-            if (p.first==name && mapa.first==autom){
-                write(p.second[1],s.c_str(),s.length());
-            }
+void errRead(int pipe){
 
+}
+
+void finalRead(int pipe){
+
+}
+
+
+
+void inOutOperations(map<string,map<string,int>> pids, map<string,map<string, int[2]>> &finals, map<string, map<string, int[2]>> &initial, map<string, map<string, int[2]>> &error, map<string, vector<arista>> &graph){
+     vector<thread> threads;
+     for(auto const& map : error){
+         for(auto const& p: map.second){
+            thread readth(errRead,p.second[0]);
+         }
+     }
+
+     for(auto const& map : finals){
+         for(auto const& p: map.second){
+            thread readth(finalRead,p.second[0]);
+         }
+     }
+
+
+    for(int i=0;i<threads.size();i++){
+        threads[i].join();
+    } 
+    
+    int status;
+    for(auto const& map : pids){
+        for (auto const& p: map.second) {
+            
+            waitpid(p.second, &status, 0);
         }
     }
+   
+    bool ss=true;
+    closePipesSisctrl(finals,initial,error, graph,ss);
+    exit(EXIT_SUCCESS);
+
+}
+
+void userThread(){
+    string linea, cmd, msg;
+    getline(cin,linea);
+    
+    YAML::Node doc = YAML::Load(linea);
+    
+    cmd = doc["cmd"].as<string>();
+    msg = doc["msg"].as<string>();
+    cout << cmd << "  " << msg<< endl;
 }
 
 
