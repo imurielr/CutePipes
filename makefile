@@ -1,4 +1,4 @@
-all: src/sisctrl
+all: bin/sisctrl
 
 CXXFLAGS=-g
 LDFLAGS= -std=c++11 -pthread -L /usr/local/lib -lyaml-cpp 
@@ -7,7 +7,7 @@ LDFLAGS= -std=c++11 -pthread -L /usr/local/lib -lyaml-cpp
 INVOICE_OBJECTS=src/sisctrl.o
 
 
-src/sisctrl: $(INVOICE_OBJECTS)
+bin/sisctrl: $(INVOICE_OBJECTS)
 	$(CXX) -o $@ $^  $(LDFLAGS)
 
 src/sisctrl.o: src/sisctrl.cpp
