@@ -1,0 +1,10 @@
+CutePipes
+
+Para poder ejecutar CutePipes, es necesario cumplir con los siguientes requerimientos:
+
+1. Estar en un sistema Linux, para aquellos usuarios de otros sistemas operativos:
+  1.1 Windows : Es posible usar Linux como subsistema y tener una maquina virtual de Ubuntu. Vease más aquí: https://wiki.ubuntu.com/WSL
+  1.2 Mac OS : Puede ejecutar una máquina virtual de Linux obteniendo una imagen de este y usando VirtualBox. Vease más aquí: https://www.virtualbox.org/
+2. Poseer el compilador g++ minimo su version 7.4.0.
+3. Poseer la versión 11 de C++.
+4. Instalar la libreria yaml-cpp en su versión 6.3 con el comando "sudo apt install libyaml-cpp-dev". Vease más en: https://yaml.org/
